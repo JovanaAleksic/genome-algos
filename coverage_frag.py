@@ -62,7 +62,7 @@ def analyze_fragment_pairings(fragments_list, counts_dir):
     # Count significant pairings for each fragment
     fragment_counts = defaultdict(int)
     for (frag1, frag2), files in all_pairings.items():
-        if len(files) >= 2:
+        if len(files) >= 1:
             fragment_counts[frag1] += 1
             fragment_counts[frag2] += 1
     
@@ -79,12 +79,15 @@ def plot_fragment_pairings(fragments_list, fragment_counts):
     plt.title('Number of Significant Fragment Pairings (≥2 libs, counts sum ≥10)', fontsize=14, pad=20)
     plt.xlabel('Fragments (in genome order)', fontsize=12)
     plt.ylabel('Number of Fragment Pairings', fontsize=12)
+
+    zero_pairing_indices = [i for i, count in enumerate(y) if count == 0]
+    zero_pairing_labels = [fragments_list[i] for i in zero_pairing_indices]
     
-    plt.xticks([])
+    plt.xticks(zero_pairing_indices, zero_pairing_labels, rotation=45, ha='right')
     plt.grid(True, axis='y', linestyle='--', alpha=0.7)
     
     plt.tight_layout()
-    plt.savefig('fragment_pairings_plot.png', dpi=300, bbox_inches='tight')
+    plt.savefig('fragment_pairings_plotL.png', dpi=300, bbox_inches='tight')
     
     print(f"Maximum pairings: {max(y)}")
     print(f"Average pairings: {np.mean(y):.2f}")
@@ -92,10 +95,10 @@ def plot_fragment_pairings(fragments_list, fragment_counts):
 
 def main():
     print("Reading fragments list...")
-    with open('sorted_genomeFrags.txt', 'r') as f:
+    with open('../sorted_genomeFrags.txt', 'r') as f:
         fragments_list = parse_fragments_list(f)
     
-    fragment_counts = analyze_fragment_pairings(fragments_list, '../CountsFiles/AllCounts/')
+    fragment_counts = analyze_fragment_pairings(fragments_list, '../../CountsFiles/AllCounts/')
     
     plot_fragment_pairings(list(fragments_list), fragment_counts)
     plt.show()
