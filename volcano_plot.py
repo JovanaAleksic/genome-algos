@@ -92,6 +92,8 @@ def create_volcano_plots(file_paths, fc_cutoff=0.8, p_cutoff=0.1, y_max=20):
         
         # Define significance thresholds
         significant = (df['logFC'] >= fc_cutoff) & (df['FDR'] < p_cutoff)
+
+        df = df[df['logFC'] >= 0]
         
         # Plot non-significant points
         ax.scatter(df.loc[~significant, 'logFC'], 
@@ -136,11 +138,13 @@ def create_volcano_plots(file_paths, fc_cutoff=0.8, p_cutoff=0.1, y_max=20):
             handles.append(plt.scatter([], [], c='gold', s=100, edgecolor='black'))
             handles.append(plt.scatter([], [], marker='^', c='black', s=50))
             labels.append('Highlighted Interactions')
-            ax.legend(handles, labels, loc='upper left')
+            ax.legend(handles, labels, loc='lower right')
     
     plt.tight_layout()
-    return plt, top_common
+    # Save as SVG
+    plt.savefig('volcano_oneSided.svg', format='svg', dpi=300, bbox_inches='tight')
 
+    return plt, top_common
 
 # File paths
 file_paths = [
@@ -157,6 +161,7 @@ print("\nTop 10 common interactions across all replicates:")
 print("-" * 50)
 for i, pair in enumerate(top_common, 1):
     print(f"{i}. {pair}")
+
 
 plot.show()
 
