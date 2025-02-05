@@ -45,14 +45,11 @@ def find_matching_fragment(protein: str, pos: int, fragment_lookup: Dict[str, Li
                 return (candidate_protein, base_pos)
     return None
 
-def process_fragment_pairs(df: pd.DataFrame, fragment_lookup: Dict[str, List[Tuple[str, int]]]) -> Dict[str, str]:
-    """Process all fragment pairs to create a mapping to real pairs."""
+def process_chunk(chunk: pd.DataFrame, fragment_lookup: Dict[str, List[Tuple[str, int]]]) -> pd.DataFrame:
+    """Process a chunk of the data."""
+    # Create fragment mapping for this chunk
     mapping = {}
-    
-    # Extract unique fragment pairs for processing
-    unique_pairs = df['ID'].unique()
-    
-    for pair in unique_pairs:
+    for pair in chunk['ID'].unique():
         parts = pair.split(':')
         if len(parts) != 4:
             continue
@@ -66,11 +63,20 @@ def process_fragment_pairs(df: pd.DataFrame, fragment_lookup: Dict[str, List[Tup
         if match1 and match2:
             real_pair = f"{match1[0]}:{match1[1]}:{match2[0]}:{match2[1]}"
             mapping[pair] = real_pair
-    
-    return mapping
 
-def process_counts_files(input_dir: str, output_dir: str, real_fragments_list: List[str]):
-    """Process all .counts files using optimized methods."""
+    if not mapping:
+        return pd.DataFrame()
+
+    # Apply mapping and aggregate
+    chunk['mapped_ID'] = chunk['ID'].map(mapping)
+    mask = chunk['ID'].isin(mapping.keys())
+    result = chunk[mask].groupby('mapped_ID')[chunk.columns[1:]].sum()
+    result.index.name = 'ID'
+    
+    return result
+
+def process_counts_files(input_dir: str, output_dir: str, real_fragments_list: List[str], chunksize: int = 10000):
+    """Process all .counts files using chunked reading."""
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     
     # Build efficient fragment lookup
@@ -85,27 +91,34 @@ def process_counts_files(input_dir: str, output_dir: str, real_fragments_list: L
             
             print(f"Processing {filename}...")
             
-            # Read file
-            df = pd.read_csv(input_path, sep='\t')
-            
-            # Create fragment mapping once for all rows
-            mapping = process_fragment_pairs(df, fragment_lookup)
-            
-            # Create result DataFrame efficiently
-            if mapping:
-                # Create a mask for rows that have matches
-                mask = df['ID'].isin(mapping.keys())
+            try:
+                # Initialize empty result DataFrame to accumulate results
+                final_result = pd.DataFrame()
                 
-                # Group and aggregate
-                df['mapped_ID'] = df['ID'].map(mapping)
-                result = df[mask].groupby('mapped_ID')[df.columns[1:]].sum()
-                result.index.name = 'ID'
-                
-                # Save results
-                result.to_csv(output_path, sep='\t')
-                print(f"Saved consolidated results to {output_path}")
-            else:
-                print(f"No matching fragments found in {filename}")
+                # Process file in chunks
+                chunks = pd.read_csv(input_path, sep='\t', chunksize=chunksize)
+                for i, chunk in enumerate(chunks):
+                    if i % 10 == 0:  # Print progress every 10 chunks
+                        print(f"Processing chunk {i+1}...")
+                    
+                    result = process_chunk(chunk, fragment_lookup)
+                    
+                    if not final_result.empty and not result.empty:
+                        # Combine with existing results
+                        final_result = pd.concat([final_result, result]).groupby(level=0).sum()
+                    elif not result.empty:
+                        final_result = result
+
+                if not final_result.empty:
+                    # Save results
+                    final_result.to_csv(output_path, sep='\t')
+                    print(f"Saved consolidated results to {output_path}")
+                else:
+                    print(f"No matching fragments found in {filename}")
+                    
+            except Exception as e:
+                print(f"Error processing {filename}: {str(e)}")
+                continue
 
 def main():
     input_dir = "../CountsFiles/AllCounts"
